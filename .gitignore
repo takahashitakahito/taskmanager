@@ -1,0 +1,4 @@
+# index.html だけをGitHub Pagesに公開する（他は全て除外）
+*
+!.gitignore
+!index.html
