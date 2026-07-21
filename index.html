@@ -257,9 +257,9 @@ textarea.inp{resize:vertical;min-height:68px;line-height:1.6}
         <div>
           <label class="lbl">優先度</label>
           <select class="sel" id="et-pri">
-            <option value="low">低</option>
-            <option value="m">中</option>
-            <option value="high">高</option>
+            <option value="high">🔴 高</option>
+            <option value="med">🟡 中</option>
+            <option value="low">🟢 低</option>
           </select>
         </div>
         <div>
@@ -270,6 +270,10 @@ textarea.inp{resize:vertical;min-height:68px;line-height:1.6}
             <option value="weekly">毎週</option>
           </select>
         </div>
+      </div>
+      <div>
+        <label class="lbl">〆切（任意）</label>
+        <input type="date" class="inp" id="et-deadline"/>
       </div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end">
@@ -403,10 +407,12 @@ textarea.inp{resize:vertical;min-height:68px;line-height:1.6}
     <div class="ct">タスクを追加</div>
     <input class="inp" id="t-name" placeholder="タスク名を入力して Enter" style="margin-bottom:9px;font-size:15px;padding:12px 15px" onkeydown="if(event.key==='Enter')addTask()"/>
     <div class="row" style="flex-wrap:wrap;gap:8px">
-      <select class="sel" id="t-pri" style="flex:1;min-width:110px"><option value="high">🔴 高</option><option value="med" selected>🟡 中</option><option value="low">🟢 低</option></select>
-      <select class="sel" id="t-rec" style="flex:1;min-width:120px"><option value="none">繰り返しなし</option><option value="daily">毎日</option><option value="weekly">毎週</option></select>
+      <select class="sel" id="t-pri" style="flex:1;min-width:100px" title="優先度"><option value="high">🔴 高</option><option value="med" selected>🟡 中</option><option value="low">🟢 低</option></select>
+      <select class="sel" id="t-rec" style="flex:1;min-width:110px"><option value="none">繰り返しなし</option><option value="daily">毎日</option><option value="weekly">毎週</option></select>
+      <input type="date" class="sel" id="t-deadline" style="flex:1;min-width:130px" title="〆切（任意）"/>
       <button class="btn pri" onclick="addTask()" style="padding:11px 20px;font-size:14px;flex-shrink:0">＋ 追加</button>
     </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:6px">優先度・繰り返し・〆切（任意）を選んで追加できます</div>
   </div>
   <div class="card">
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
@@ -648,7 +654,7 @@ const saveSuggestions=()=>localStorage.setItem('tm_suggestions',JSON.stringify(s
 const saveRoutines=()=>localStorage.setItem('tm_routines',JSON.stringify(routines));
 let filt='all',expanded=new Set(),noteExpanded=new Set();
 
-tasks=tasks.map(t=>({...t,subtasks:t.subtasks||[],links:t.links||[],noteText:t.noteText||'',mit:t.mit||false,date:t.date||todayStr,recurring:t.recurring||'none'}));
+tasks=tasks.map(t=>({...t,subtasks:t.subtasks||[],links:t.links||[],noteText:t.noteText||'',mit:t.mit||false,date:t.date||todayStr,recurring:t.recurring||'none',deadline:t.deadline||''}));
 tasks.forEach(t=>{if(t.status==='snoozed'&&t.snoozeDate&&t.snoozeDate<=todayStr){t.status='todo';delete t.snoozeDate;}});
 tasks.filter(t=>t.recurring&&t.recurring!=='none'&&t.lastAdded).forEach(tm=>{const diff=Math.floor((new Date(todayStr)-new Date(tm.lastAdded))/86400000);if((tm.recurring==='daily'&&tm.lastAdded<todayStr)||(tm.recurring==='weekly'&&diff>=7)){tasks.unshift({id:Date.now()+Math.random(),name:tm.name,status:'todo',pri:tm.pri||'med',ela:0,subtasks:[],links:[],noteText:'',mit:false,date:todayStr,recurring:'none'});tm.lastAdded=todayStr;}});
 save();
@@ -851,10 +857,10 @@ function renderDashCal(){
 function renderMIT(){const el=document.getElementById('mit-list');const mits=tasks.filter(t=>t.mit);if(!mits.length){el.innerHTML='<div class="empty" style="padding:12px;font-size:12px">タスク一覧の ★ でMITに設定</div>';return;}el.innerHTML=mits.slice(0,3).map((t,i)=>`<div class="mit-row${t.status==='done'?' done':''}"><div class="mit-num">0${i+1}</div><div class="mit-name">${t.name}</div><div class="circ${t.status==='done'?' ok':''}" onclick="applyStatusDirect(${t.id},'${t.status==='done'?'todo':'done'}')"></div></div>`).join('');}
 function applyStatusDirect(id,status){const t=tasks.find(x=>x.id===id);if(!t)return;t.status=status;save();renderTasks();renderMIT();renderDash();}
 function setF(f,el){filt=f;document.querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));el.classList.add('on');renderTasks();}
-function renderTasks(){const el=document.getElementById('task-list');const f=tasks.filter(t=>filt==='all'||(filt==='snoozed'?t.status==='snoozed':t.status===filt));if(!f.length){el.innerHTML='<div class="empty">タスクがありません</div>';return;}el.innerHTML=f.map(t=>{const exp=expanded.has(t.id),nexp=noteExpanded.has(t.id);const subs=t.subtasks||[],sd=subs.filter(s=>s.done).length;const links=t.links||[];const hasNote=links.length>0||(t.noteText&&t.noteText.trim().length>0);const st=t.status||'todo';const badgeIcon=st==='doing'?'▶':st==='done'?'✓':st==='snoozed'?'→':'';return`<div class="ti${t.mit?' mit-hi':''} st-${st}"><div class="trow"><div class="st-badge ${st}" onclick="openStatusPopup(${t.id},this)">${badgeIcon}</div><div class="pbar p${t.pri||'m'}"></div><span class="tname${st==='done'?' done':''}">${t.name}</span>${subs.length?`<span style="font-size:10px;color:var(--t3)">${sd}/${subs.length}</span>`:''}${hasNote?'<div class="has-note-dot"></div>':''}${t.mit?'<span class="tag tag-blue">MIT</span>':''}${st==='doing'?'<span class="tag tag-amber">進行中</span>':''}${st==='snoozed'?`<span class="tag tag-gray">先送り${t.snoozeDate?' '+t.snoozeDate.slice(5):''}</span>`:''}${t.recurring&&t.recurring!=='none'?`<span class="tag tag-amber">${t.recurring==='daily'?'毎日':'毎週'}</span>`:''}${t.ela>0?`<span style="font-family:var(--mono);font-size:11px;color:var(--t3)">${fmtd(t.ela)}</span>`:''}<div class="tact"><button class="ib" onclick="openEditModal(${t.id})" title="編集">✎</button><button class="ib" onclick="toggleNote(${t.id})" style="${nexp?'color:var(--acc)':''}">📎</button><button class="ib star${t.mit?' on':''}" onclick="toggleMit(${t.id})">★</button><button class="ib" onclick="toggleExp(${t.id})">${exp?'▲':'▼'}</button><button class="ib" onclick="delTask(${t.id})">✕</button></div></div>${nexp?`<div class="task-note">${links.length?`<div class="note-links">${links.map(l=>`<div class="note-link-row"><span class="note-link-icon">${l.icon}</span><span class="note-link-label">${l.label}</span><a href="${l.url}" target="_blank" class="note-link-open">開く</a><button class="note-link-del" onclick="removeLink(${t.id},${l.id})">✕</button></div>`).join('')}</div>`:''}
+function renderTasks(){const el=document.getElementById('task-list');const f=tasks.filter(t=>filt==='all'||(filt==='snoozed'?t.status==='snoozed':t.status===filt));if(!f.length){el.innerHTML='<div class="empty">タスクがありません</div>';return;}el.innerHTML=f.map(t=>{const exp=expanded.has(t.id),nexp=noteExpanded.has(t.id);const subs=t.subtasks||[],sd=subs.filter(s=>s.done).length;const links=t.links||[];const hasNote=links.length>0||(t.noteText&&t.noteText.trim().length>0);const st=t.status||'todo';const badgeIcon=st==='doing'?'▶':st==='done'?'✓':st==='snoozed'?'→':'';return`<div class="ti${t.mit?' mit-hi':''} st-${st}"><div class="trow"><div class="st-badge ${st}" onclick="openStatusPopup(${t.id},this)">${badgeIcon}</div><div class="pbar p${t.pri||'m'}"></div><span class="tname${st==='done'?' done':''}">${t.name}</span>${(()=>{const p=t.pri||'med';const pl={high:'🔴 高',med:'🟡 中',low:'🟢 低'}[p]||'🟡 中';const pc={high:'tag-amber',med:'tag-gray',low:'tag-green'}[p]||'tag-gray';return `<span class="tag ${pc}" style="flex-shrink:0">${pl}</span>`;})()}${t.deadline?(()=>{const diff=Math.floor((new Date(t.deadline+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000);const dm=new Date(t.deadline+'T00:00:00');const lbl=(dm.getMonth()+1)+'/'+dm.getDate();const overdue=st!=='done'&&diff<0;const soon=st!=='done'&&diff>=0&&diff<=2;const pfx=overdue?'⚠ ':soon?'⚡ ':'';const style=overdue?'style="background:#fee2e2;color:#b91c1c;flex-shrink:0"':soon?'style="background:#fef3c7;color:#92400e;flex-shrink:0"':'style="flex-shrink:0"';const cls=overdue||soon?'tag':'tag tag-blue';return `<span class="${cls}" ${style}>${pfx}〆${lbl}</span>`;})():''}${subs.length?`<span style="font-size:10px;color:var(--t3)">${sd}/${subs.length}</span>`:''}${hasNote?'<div class="has-note-dot"></div>':''}${t.mit?'<span class="tag tag-blue">MIT</span>':''}${st==='doing'?'<span class="tag tag-amber">進行中</span>':''}${st==='snoozed'?`<span class="tag tag-gray">先送り${t.snoozeDate?' '+t.snoozeDate.slice(5):''}</span>`:''}${t.recurring&&t.recurring!=='none'?`<span class="tag tag-amber">${t.recurring==='daily'?'毎日':'毎週'}</span>`:''}${t.ela>0?`<span style="font-family:var(--mono);font-size:11px;color:var(--t3)">${fmtd(t.ela)}</span>`:''}<div class="tact"><button class="ib" onclick="openEditModal(${t.id})" title="編集">✎</button><button class="ib" onclick="toggleNote(${t.id})" style="${nexp?'color:var(--acc)':''}">📎</button><button class="ib star${t.mit?' on':''}" onclick="toggleMit(${t.id})">★</button><button class="ib" onclick="toggleExp(${t.id})">${exp?'▲':'▼'}</button><button class="ib" onclick="delTask(${t.id})">✕</button></div></div>${nexp?`<div class="task-note">${links.length?`<div class="note-links">${links.map(l=>`<div class="note-link-row"><span class="note-link-icon">${l.icon}</span><span class="note-link-label">${l.label}</span><a href="${l.url}" target="_blank" class="note-link-open">開く</a><button class="note-link-del" onclick="removeLink(${t.id},${l.id})">✕</button></div>`).join('')}</div>`:''}
 <textarea class="note-text-area" placeholder="メモを入力..." onchange="saveNoteText(${t.id},this.value)" onblur="saveNoteText(${t.id},this.value)">${t.noteText||''}</textarea>
 <div class="note-add-row"><input class="note-add-inp" id="nl-url-${t.id}" placeholder="URL（slack/notion/docs/figma...）" onkeydown="if(event.key==='Enter')addLink(${t.id})"/><input class="note-add-label" id="nl-lbl-${t.id}" placeholder="ラベル（任意）"/><button class="note-add-btn" onclick="addLink(${t.id})">＋ 追加</button></div></div>`:''}${exp?`<div class="subtasks">${subs.map((s,i)=>`<div class="sti"><div class="schk${s.done?' ok':''}" onclick="toggleSub(${t.id},${i})"></div><span class="sname${s.done?' done':''}">${s.name}</span><button class="ib" onclick="delSub(${t.id},${i})">✕</button></div>`).join('')}<div style="display:flex;gap:6px;margin-top:6px"><input class="inp sm" id="sa-${t.id}" placeholder="サブタスクを追加..." style="flex:1" onkeydown="if(event.key==='Enter')addSub(${t.id})"/><button class="btn xs pri" onclick="addSub(${t.id})">＋</button></div></div>`:''}</div>`;}).join('');}
-function addTask(){const n=document.getElementById('t-name').value.trim();if(!n)return;const rec=document.getElementById('t-rec').value;tasks.unshift({id:Date.now(),name:n,status:'todo',pri:document.getElementById('t-pri').value,ela:0,subtasks:[],links:[],noteText:'',mit:false,date:todayStr,recurring:rec,lastAdded:rec!=='none'?todayStr:undefined});save();renderTasks();renderMIT();populateCalSel();document.getElementById('t-name').value='';showToast('✓ タスクを追加しました');}
+function addTask(){const n=document.getElementById('t-name').value.trim();if(!n)return;const rec=document.getElementById('t-rec').value;const dl=document.getElementById('t-deadline').value||'';tasks.unshift({id:Date.now(),name:n,status:'todo',pri:document.getElementById('t-pri').value,ela:0,subtasks:[],links:[],noteText:'',mit:false,date:todayStr,recurring:rec,deadline:dl,lastAdded:rec!=='none'?todayStr:undefined});save();renderTasks();renderMIT();populateCalSel();document.getElementById('t-name').value='';document.getElementById('t-deadline').value='';showToast('✓ タスクを追加しました');}
 function toggleMit(id){const t=tasks.find(x=>x.id===id);if(!t)return;t.mit=!t.mit;save();renderTasks();renderMIT();showToast(t.mit?'★ MITに設定しました':'MITを解除しました');}
 function toggleExp(id){expanded.has(id)?expanded.delete(id):expanded.add(id);renderTasks();}
 
@@ -864,8 +870,9 @@ function openEditModal(id){
   if(!t)return;
   editingTaskId=id;
   document.getElementById('et-name').value=t.name;
-  document.getElementById('et-pri').value=t.pri||'m';
+  document.getElementById('et-pri').value=t.pri||'med';
   document.getElementById('et-rec').value=t.recurring||'none';
+  document.getElementById('et-deadline').value=t.deadline||'';
   document.getElementById('edit-task-modal').classList.add('open');
   document.getElementById('et-name').focus();
 }
@@ -882,6 +889,7 @@ function saveEditTask(){
   t.name=name;
   t.pri=document.getElementById('et-pri').value;
   t.recurring=document.getElementById('et-rec').value;
+  t.deadline=document.getElementById('et-deadline').value||'';
   save();
   renderTasks();
   renderMIT();
@@ -944,7 +952,7 @@ function renderGcalQueue(){
     +queue.map(r=>`<div style="font-size:11px;color:var(--t2);padding:3px 0;border-bottom:0.5px solid var(--bd)">${r.title}<br><span style="font-family:var(--mono);color:var(--t3)">${r.date} ${r.startTime.slice(11,16)}〜${r.endTime.slice(11,16)}</span></div>`).join('');
 }
 function addMemo(){const proj=document.getElementById('m-proj').value.trim();const task=document.getElementById('m-task').value.trim();if(!proj||!task){showToast('案件名とタスク内容は必須です');return;}memos.unshift({id:Date.now(),proj,deadline:document.getElementById('m-deadline').value||'',task,detail:document.getElementById('m-detail').value.trim(),taskified:false,createdAt:todayStr});saveMemos();['m-proj','m-task','m-detail'].forEach(id=>document.getElementById(id).value='');document.getElementById('m-deadline').value='';renderMemos();showToast('✓ メモを保存しました');}
-function taskifyMemo(id){const m=memos.find(x=>x.id===id);if(!m)return;tasks.unshift({id:Date.now(),name:`【${m.proj}】${m.task}`,status:'todo',pri:'high',ela:0,subtasks:[],links:[],noteText:'',mit:false,date:todayStr,recurring:'none'});m.taskified=true;save();saveMemos();renderMemos();renderTasks();populateCalSel();showToast('✓ タスクに追加しました');}
+function taskifyMemo(id){const m=memos.find(x=>x.id===id);if(!m)return;tasks.unshift({id:Date.now(),name:`【${m.proj}】${m.task}`,status:'todo',pri:'high',ela:0,subtasks:[],links:[],noteText:'',mit:false,date:todayStr,recurring:'none',deadline:m.deadline||''});m.taskified=true;save();saveMemos();renderMemos();renderTasks();populateCalSel();showToast('✓ タスクに追加しました');}
 function delMemo(id){memos=memos.filter(x=>x.id!==id);saveMemos();renderMemos();}
 
 // ── 案件管理 ──
@@ -1165,7 +1173,7 @@ function renderSuggest(){
 }
 function acceptSuggest(id){
   const s=suggestions.find(x=>x.id===id);if(!s)return;
-  tasks.unshift({id:Date.now(),name:s.name,status:'todo',pri:s.pri||'med',ela:0,subtasks:[],links:[],noteText:s.reason||'',mit:false,date:todayStr,recurring:'none'});
+  tasks.unshift({id:Date.now(),name:s.name,status:'todo',pri:s.pri||'med',ela:0,subtasks:[],links:[],noteText:s.reason||'',mit:false,date:todayStr,recurring:'none',deadline:''});
   suggestions=suggestions.filter(x=>x.id!==id);
   save();saveSuggestions();renderSuggest();renderTasks();renderMIT();populateCalSel();
   showToast('✓ 「タスク」タブに追加しました');
@@ -1184,7 +1192,7 @@ function addRoutine(){
 function delRoutine(id){routines=routines.filter(x=>x.id!==id);saveRoutines();renderRoutine();}
 function routineToTask(id){
   const r=routines.find(x=>x.id===id);if(!r)return;
-  tasks.unshift({id:Date.now(),name:r.name,status:'todo',pri:r.pri||'med',ela:0,subtasks:[],links:[],noteText:'',mit:false,date:todayStr,recurring:'none'});
+  tasks.unshift({id:Date.now(),name:r.name,status:'todo',pri:r.pri||'med',ela:0,subtasks:[],links:[],noteText:'',mit:false,date:todayStr,recurring:'none',deadline:''});
   save();renderTasks();renderMIT();populateCalSel();
   showToast('✓ 「タスク」タブに追加しました（ルーティンは残ります）');
 }
