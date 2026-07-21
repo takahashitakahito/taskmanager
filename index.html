@@ -623,7 +623,26 @@ let tasks=S('tm_tasks',null)||[];
 let logs=S('tm_logs',null)||[];
 let memos=S('tm_memos',[]);
 let pomoLogs=S('tm_plogs',[]);
-let suggestions=S('tm_suggestions',[]);
+// ── AIタスク提案データ（Claudeが「タスク作成」時に更新してpush） ──
+// SUGGEST_VERSION を変えると、ユーザーのリロード時に新しい提案で上書きされる。
+// 同じバージョンの間は、採用/却下の状態がlocalStorageに保持される。
+const SUGGEST_VERSION="2026-07-21-01";
+const INITIAL_SUGGESTIONS=[
+  {name:"SOV提案資料の修正（p.3 TikTokの訴求開発を追記／p.4 プロダクト提供と人的可動を分けて記載／「依頼事項」スライド追加）",pri:"high",source:"slack",reason:"堀田さんから今朝DM依頼"},
+  {name:"広告SOV提案デモイメージの準備",pri:"high",source:"cal",reason:"12:30のデモ共有MTGまでに"},
+  {name:"データCS部会のアジェンダ確認・準備",pri:"med",source:"cal",reason:"13:00 週次定例"},
+  {name:"ZENB_AD×Letro：LP施策スケジュールのすり合わせ準備",pri:"med",source:"cal",reason:"15:00 連携MTG"}
+];
+let suggestions=(()=>{
+  const savedVer=localStorage.getItem('tm_suggest_version');
+  if(SUGGEST_VERSION&&savedVer!==SUGGEST_VERSION){
+    const list=INITIAL_SUGGESTIONS.map((s,i)=>({id:Date.now()+i,name:s.name,pri:s.pri||'med',source:s.source||'other',reason:s.reason||''}));
+    localStorage.setItem('tm_suggest_version',SUGGEST_VERSION);
+    localStorage.setItem('tm_suggestions',JSON.stringify(list));
+    return list;
+  }
+  return S('tm_suggestions',[]);
+})();
 let routines=S('tm_routines',[]);
 const saveSuggestions=()=>localStorage.setItem('tm_suggestions',JSON.stringify(suggestions));
 const saveRoutines=()=>localStorage.setItem('tm_routines',JSON.stringify(routines));
