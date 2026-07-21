@@ -244,6 +244,12 @@ textarea.inp{resize:vertical;min-height:68px;line-height:1.6}
     <button class="st-opt" data-status="done" onclick="applyStatus('done')"><div class="st-opt-dot" style="background:var(--suc)"></div>完了</button>
     <button class="st-opt" data-status="snoozed" onclick="applyStatus('snoozed')"><div class="st-opt-dot" style="background:var(--t3)"></div>明日に先送り</button>
   </div>
+  <div class="st-popup" id="the-rt-popup">
+    <div style="font-size:10px;color:var(--t3);padding:6px 11px 3px">ルーティンに登録</div>
+    <button class="st-opt" onclick="applyRoutineFreq('daily')"><div class="st-opt-dot" style="background:var(--suc)"></div>毎日</button>
+    <button class="st-opt" onclick="applyRoutineFreq('weekly')"><div class="st-opt-dot" style="background:var(--acc)"></div>毎週</button>
+    <button class="st-opt" onclick="applyRoutineFreq('monthly')"><div class="st-opt-dot" style="background:var(--warn)"></div>毎月</button>
+  </div>
 </div>
 
 <div class="modal-overlay" id="edit-task-modal">
@@ -633,17 +639,17 @@ let pomoLogs=S('tm_plogs',[]);
 // ── AIタスク提案データ（Claudeが「タスク作成」時に更新してpush） ──
 // SUGGEST_VERSION を変えると、ユーザーのリロード時に新しい提案で上書きされる。
 // 同じバージョンの間は、採用/却下の状態がlocalStorageに保持される。
-const SUGGEST_VERSION="2026-07-21-01";
+const SUGGEST_VERSION="2026-07-21-02";
 const INITIAL_SUGGESTIONS=[
-  {name:"SOV提案資料の修正（p.3 TikTokの訴求開発を追記／p.4 プロダクト提供と人的可動を分けて記載／「依頼事項」スライド追加）",pri:"high",source:"slack",reason:"堀田さんから今朝DM依頼"},
+  {name:"SOV提案資料の修正（p.3 TikTokの訴求開発を追記／p.4 プロダクト提供と人的可動を分けて記載／「依頼事項」スライド追加）",pri:"high",source:"slack",reason:"堀田さんから今朝DM依頼（7/21 6:55）",refs:[{url:"https://aainc-develop.slack.com/archives/D079BMQM40P/p1784584521386399",label:"堀田さんのDM"}]},
   {name:"広告SOV提案デモイメージの準備",pri:"high",source:"cal",reason:"12:30のデモ共有MTGまでに"},
-  {name:"データCS部会のアジェンダ確認・準備",pri:"med",source:"cal",reason:"13:00 週次定例"},
-  {name:"ZENB_AD×Letro：LP施策スケジュールのすり合わせ準備",pri:"med",source:"cal",reason:"15:00 連携MTG"}
+  {name:"データCS部会のアジェンダ確認・準備",pri:"med",source:"cal",reason:"13:00 週次定例",refs:[{url:"https://docs.google.com/document/d/1CdIRnsEa4RgEnWocDBJcnBGWO2EZJLhE4gvnu05vncg/edit",label:"データCS部_週次定例アジェンダ"}]},
+  {name:"ZENB_AD×Letro：LP施策スケジュールのすり合わせ準備",pri:"med",source:"cal",reason:"15:00 連携MTG",refs:[{url:"https://docs.google.com/spreadsheets/d/1FUKcHhq0z9BtCOxAOvU6uHqHJ70MGIoQXdyy6bTBLds/edit",label:"【ZENB】AD×Letro"}]}
 ];
 let suggestions=(()=>{
   const savedVer=localStorage.getItem('tm_suggest_version');
   if(SUGGEST_VERSION&&savedVer!==SUGGEST_VERSION){
-    const list=INITIAL_SUGGESTIONS.map((s,i)=>({id:Date.now()+i,name:s.name,pri:s.pri||'med',source:s.source||'other',reason:s.reason||''}));
+    const list=INITIAL_SUGGESTIONS.map((s,i)=>({id:Date.now()+i,name:s.name,pri:s.pri||'med',source:s.source||'other',reason:s.reason||'',refs:s.refs||[]}));
     localStorage.setItem('tm_suggest_version',SUGGEST_VERSION);
     localStorage.setItem('tm_suggestions',JSON.stringify(list));
     return list;
@@ -692,6 +698,14 @@ function openStatusPopup(id,badgeEl){popupTargetId=id;const rect=badgeEl.getBoun
 function closePopup(){popup.classList.remove('open');popupTargetId=null;}
 function applyStatus(status){if(!popupTargetId)return;const t=tasks.find(x=>x.id===popupTargetId);if(!t)return;t.status=status;if(status==='snoozed'){const d=new Date();d.setDate(d.getDate()+1);t.snoozeDate=d.toISOString().split('T')[0];}else delete t.snoozeDate;save();closePopup();renderTasks();renderMIT();renderDash();const labels={todo:'未着手に変更',doing:'▶ 進行中に変更',done:'✓ 完了',snoozed:'→ 先送り'};showToast(labels[status]||'');}
 document.addEventListener('click',e=>{if(!popup.contains(e.target)&&!e.target.closest('.st-badge'))closePopup();});
+
+// タスク→ルーティン化ポップアップ
+let rtPopupTargetId=null;
+const rtPopup=document.getElementById('the-rt-popup');
+function openRoutinePopup(id,el){rtPopupTargetId=id;const rect=el.getBoundingClientRect();const spaceBelow=window.innerHeight-rect.bottom;rtPopup.style.top=(spaceBelow>=180?rect.bottom+4:rect.top-184)+'px';rtPopup.style.left=Math.max(8,Math.min(rect.left-90,window.innerWidth-140))+'px';rtPopup.classList.add('open');if(window.event)window.event.stopPropagation();}
+function closeRtPopup(){if(rtPopup)rtPopup.classList.remove('open');rtPopupTargetId=null;}
+function applyRoutineFreq(freq){if(!rtPopupTargetId)return;const t=tasks.find(x=>x.id===rtPopupTargetId);if(!t){closeRtPopup();return;}if(routines.find(r=>r.name===t.name&&r.freq===freq)){showToast('⚠ 同じルーティンが既にあります');closeRtPopup();return;}routines.unshift({id:Date.now(),name:t.name,freq,pri:t.pri||'med'});saveRoutines();renderRoutine();closeRtPopup();const fl={daily:'毎日',weekly:'毎週',monthly:'毎月'};showToast('🔁 ルーティン('+fl[freq]+')に登録しました');}
+document.addEventListener('click',e=>{if(rtPopup&&!rtPopup.contains(e.target)&&!e.target.closest('[title="ルーティン化"]'))closeRtPopup();});
 
 function detectLinkType(url){if(/slack\.com/i.test(url))return{icon:'💬',label:'Slack'};if(/notion\.so/i.test(url))return{icon:'📝',label:'Notion'};if(/docs\.google\.com\/spreadsheets/i.test(url))return{icon:'📊',label:'スプシ'};if(/docs\.google\.com\/document/i.test(url))return{icon:'📄',label:'Gドキュメント'};if(/docs\.google\.com\/presentation/i.test(url))return{icon:'📑',label:'スライド'};if(/drive\.google\.com/i.test(url))return{icon:'📁',label:'Gドライブ'};if(/figma\.com/i.test(url))return{icon:'🎨',label:'Figma'};if(/github\.com/i.test(url))return{icon:'💻',label:'GitHub'};if(/meet\.google\.com/i.test(url))return{icon:'🎥',label:'Meet'};if(/zoom\.us/i.test(url))return{icon:'🎥',label:'Zoom'};if(/teams\.microsoft\.com/i.test(url))return{icon:'🟦',label:'Teams'};try{const host=new URL(url).hostname.replace('www.','');return{icon:'🔗',label:host};}catch{return{icon:'🔗',label:'リンク'};}}
 function toggleNote(id){noteExpanded.has(id)?noteExpanded.delete(id):noteExpanded.add(id);renderTasks();}
@@ -858,7 +872,7 @@ function renderDashCal(){
 function renderMIT(){const el=document.getElementById('mit-list');const mits=tasks.filter(t=>t.mit);if(!mits.length){el.innerHTML='<div class="empty" style="padding:12px;font-size:12px">タスク一覧の ★ でMITに設定</div>';return;}el.innerHTML=mits.slice(0,3).map((t,i)=>`<div class="mit-row${t.status==='done'?' done':''}"><div class="mit-num">0${i+1}</div><div class="mit-name">${t.name}</div><div class="circ${t.status==='done'?' ok':''}" onclick="applyStatusDirect(${t.id},'${t.status==='done'?'todo':'done'}')"></div></div>`).join('');}
 function applyStatusDirect(id,status){const t=tasks.find(x=>x.id===id);if(!t)return;t.status=status;save();renderTasks();renderMIT();renderDash();}
 function setF(f,el){filt=f;document.querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));el.classList.add('on');renderTasks();}
-function renderTasks(){const el=document.getElementById('task-list');const f=tasks.filter(t=>filt==='all'||(filt==='snoozed'?t.status==='snoozed':t.status===filt));if(!f.length){el.innerHTML='<div class="empty">タスクがありません</div>';return;}el.innerHTML=f.map(t=>{const exp=expanded.has(t.id),nexp=noteExpanded.has(t.id);const subs=t.subtasks||[],sd=subs.filter(s=>s.done).length;const links=t.links||[];const hasNote=links.length>0||(t.noteText&&t.noteText.trim().length>0);const st=t.status||'todo';const badgeIcon=st==='doing'?'▶':st==='done'?'✓':st==='snoozed'?'→':'';return`<div class="ti${t.mit?' mit-hi':''} st-${st}${(t.deadline&&st!=='done'&&Math.floor((new Date(t.deadline+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000)<0)?' overdue':''}"><div class="trow"><div class="st-badge ${st}" onclick="openStatusPopup(${t.id},this)">${badgeIcon}</div><div class="pbar p${t.pri||'m'}"></div><span class="tname${st==='done'?' done':''}">${t.name}</span>${(()=>{const p=t.pri||'med';const pl={high:'🔴 高',med:'🟡 中',low:'🟢 低'}[p]||'🟡 中';const pc={high:'tag-amber',med:'tag-gray',low:'tag-green'}[p]||'tag-gray';return `<span class="tag ${pc}" style="flex-shrink:0">${pl}</span>`;})()}${t.deadline?(()=>{const diff=Math.floor((new Date(t.deadline+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000);const dm=new Date(t.deadline+'T00:00:00');const lbl=(dm.getMonth()+1)+'/'+dm.getDate();const overdue=st!=='done'&&diff<0;const soon=st!=='done'&&diff>=0&&diff<=2;const pfx=overdue?'⚠ ':soon?'⚡ ':'';const style=overdue?'style="background:#fee2e2;color:#b91c1c;flex-shrink:0"':soon?'style="background:#fef3c7;color:#92400e;flex-shrink:0"':'style="flex-shrink:0"';const cls=overdue||soon?'tag':'tag tag-blue';return `<span class="${cls}" ${style}>${pfx}〆${lbl}</span>`;})():''}${subs.length?`<span style="font-size:10px;color:var(--t3)">${sd}/${subs.length}</span>`:''}${hasNote?'<div class="has-note-dot"></div>':''}${t.mit?'<span class="tag tag-blue">MIT</span>':''}${st==='doing'?'<span class="tag tag-amber">進行中</span>':''}${st==='snoozed'?`<span class="tag tag-gray">先送り${t.snoozeDate?' '+t.snoozeDate.slice(5):''}</span>`:''}${t.recurring&&t.recurring!=='none'?`<span class="tag tag-amber">${t.recurring==='daily'?'毎日':'毎週'}</span>`:''}${t.ela>0?`<span style="font-family:var(--mono);font-size:11px;color:var(--t3)">${fmtd(t.ela)}</span>`:''}<div class="tact"><button class="ib" onclick="openEditModal(${t.id})" title="編集">✎</button><button class="ib" onclick="toggleNote(${t.id})" style="${nexp?'color:var(--acc)':''}">📎</button><button class="ib star${t.mit?' on':''}" onclick="toggleMit(${t.id})">★</button><button class="ib" onclick="toggleExp(${t.id})">${exp?'▲':'▼'}</button><button class="ib" onclick="delTask(${t.id})">✕</button></div></div>${nexp?`<div class="task-note">${links.length?`<div class="note-links">${links.map(l=>`<div class="note-link-row"><span class="note-link-icon">${l.icon}</span><span class="note-link-label">${l.label}</span><a href="${l.url}" target="_blank" class="note-link-open">開く</a><button class="note-link-del" onclick="removeLink(${t.id},${l.id})">✕</button></div>`).join('')}</div>`:''}
+function renderTasks(){const el=document.getElementById('task-list');const f=tasks.filter(t=>filt==='all'||(filt==='snoozed'?t.status==='snoozed':t.status===filt));if(!f.length){el.innerHTML='<div class="empty">タスクがありません</div>';return;}el.innerHTML=f.map(t=>{const exp=expanded.has(t.id),nexp=noteExpanded.has(t.id);const subs=t.subtasks||[],sd=subs.filter(s=>s.done).length;const links=t.links||[];const hasNote=links.length>0||(t.noteText&&t.noteText.trim().length>0);const st=t.status||'todo';const badgeIcon=st==='doing'?'▶':st==='done'?'✓':st==='snoozed'?'→':'';return`<div class="ti${t.mit?' mit-hi':''} st-${st}${(t.deadline&&st!=='done'&&Math.floor((new Date(t.deadline+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000)<0)?' overdue':''}"><div class="trow"><div class="st-badge ${st}" onclick="openStatusPopup(${t.id},this)">${badgeIcon}</div><div class="pbar p${t.pri||'m'}"></div><span class="tname${st==='done'?' done':''}">${t.name}</span>${(()=>{const p=t.pri||'med';const pl={high:'🔴 高',med:'🟡 中',low:'🟢 低'}[p]||'🟡 中';const pc={high:'tag-amber',med:'tag-gray',low:'tag-green'}[p]||'tag-gray';return `<span class="tag ${pc}" style="flex-shrink:0">${pl}</span>`;})()}${t.deadline?(()=>{const diff=Math.floor((new Date(t.deadline+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000);const dm=new Date(t.deadline+'T00:00:00');const lbl=(dm.getMonth()+1)+'/'+dm.getDate();const overdue=st!=='done'&&diff<0;const soon=st!=='done'&&diff>=0&&diff<=2;const pfx=overdue?'⚠ ':soon?'⚡ ':'';const style=overdue?'style="background:#fee2e2;color:#b91c1c;flex-shrink:0"':soon?'style="background:#fef3c7;color:#92400e;flex-shrink:0"':'style="flex-shrink:0"';const cls=overdue||soon?'tag':'tag tag-blue';return `<span class="${cls}" ${style}>${pfx}〆${lbl}</span>`;})():''}${subs.length?`<span style="font-size:10px;color:var(--t3)">${sd}/${subs.length}</span>`:''}${hasNote?'<div class="has-note-dot"></div>':''}${t.mit?'<span class="tag tag-blue">MIT</span>':''}${st==='doing'?'<span class="tag tag-amber">進行中</span>':''}${st==='snoozed'?`<span class="tag tag-gray">先送り${t.snoozeDate?' '+t.snoozeDate.slice(5):''}</span>`:''}${t.recurring&&t.recurring!=='none'?`<span class="tag tag-amber">${t.recurring==='daily'?'毎日':'毎週'}</span>`:''}${t.ela>0?`<span style="font-family:var(--mono);font-size:11px;color:var(--t3)">${fmtd(t.ela)}</span>`:''}<div class="tact"><button class="ib" onclick="openEditModal(${t.id})" title="編集">✎</button><button class="ib" onclick="openRoutinePopup(${t.id},this)" title="ルーティン化">🔁</button><button class="ib" onclick="toggleNote(${t.id})" style="${nexp?'color:var(--acc)':''}">📎</button><button class="ib star${t.mit?' on':''}" onclick="toggleMit(${t.id})">★</button><button class="ib" onclick="toggleExp(${t.id})">${exp?'▲':'▼'}</button><button class="ib" onclick="delTask(${t.id})">✕</button></div></div>${nexp?`<div class="task-note">${links.length?`<div class="note-links">${links.map(l=>`<div class="note-link-row"><span class="note-link-icon">${l.icon}</span><span class="note-link-label">${l.label}</span><a href="${l.url}" target="_blank" class="note-link-open">開く</a><button class="note-link-del" onclick="removeLink(${t.id},${l.id})">✕</button></div>`).join('')}</div>`:''}
 <textarea class="note-text-area" placeholder="メモを入力..." onchange="saveNoteText(${t.id},this.value)" onblur="saveNoteText(${t.id},this.value)">${t.noteText||''}</textarea>
 <div class="note-add-row"><input class="note-add-inp" id="nl-url-${t.id}" placeholder="URL（slack/notion/docs/figma...）" onkeydown="if(event.key==='Enter')addLink(${t.id})"/><input class="note-add-label" id="nl-lbl-${t.id}" placeholder="ラベル（任意）"/><button class="note-add-btn" onclick="addLink(${t.id})">＋ 追加</button></div></div>`:''}${exp?`<div class="subtasks">${subs.map((s,i)=>`<div class="sti"><div class="schk${s.done?' ok':''}" onclick="toggleSub(${t.id},${i})"></div><span class="sname${s.done?' done':''}">${s.name}</span><button class="ib" onclick="delSub(${t.id},${i})">✕</button></div>`).join('')}<div style="display:flex;gap:6px;margin-top:6px"><input class="inp sm" id="sa-${t.id}" placeholder="サブタスクを追加..." style="flex:1" onkeydown="if(event.key==='Enter')addSub(${t.id})"/><button class="btn xs pri" onclick="addSub(${t.id})">＋</button></div></div>`:''}</div>`;}).join('');}
 function addTask(){const n=document.getElementById('t-name').value.trim();if(!n)return;const rec=document.getElementById('t-rec').value;const dl=document.getElementById('t-deadline').value||'';tasks.unshift({id:Date.now(),name:n,status:'todo',pri:document.getElementById('t-pri').value,ela:0,subtasks:[],links:[],noteText:'',mit:false,date:todayStr,recurring:rec,deadline:dl,lastAdded:rec!=='none'?todayStr:undefined});save();renderTasks();renderMIT();populateCalSel();document.getElementById('t-name').value='';document.getElementById('t-deadline').value='';showToast('✓ タスクを追加しました');}
@@ -1165,6 +1179,7 @@ function renderSuggest(){
         <span class="tag tag-gray">${srcLabel[s.source]||srcLabel.other}</span>
         ${s.reason?`<span style="font-size:11px;color:var(--t3)">${s.reason}</span>`:''}
       </div>
+      ${(s.refs&&s.refs.length)?`<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">${s.refs.map(r=>{const u=(r.url||'').startsWith('http')?r.url:'https://'+r.url;const d=detectLinkType(u);return `<a href="${u}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--acc);text-decoration:none"><span>${d.icon}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label||d.label}</span></a>`;}).join('')}</div>`:''}
     </div>
     <div style="display:flex;gap:5px;flex-shrink:0">
       <button class="btn xs pri" onclick="acceptSuggest(${s.id})">➕ タスクに追加</button>
@@ -1174,15 +1189,16 @@ function renderSuggest(){
 }
 function acceptSuggest(id){
   const s=suggestions.find(x=>x.id===id);if(!s)return;
-  tasks.unshift({id:Date.now(),name:s.name,status:'todo',pri:s.pri||'med',ela:0,subtasks:[],links:[],noteText:s.reason||'',mit:false,date:todayStr,recurring:'none',deadline:''});
+  const links=(s.refs||[]).map((r,i)=>{const u=(r.url||'').startsWith('http')?r.url:'https://'+r.url;const d=detectLinkType(u);return{id:Date.now()+i,url:u,label:r.label||d.label,icon:d.icon};});
+  tasks.unshift({id:Date.now(),name:s.name,status:'todo',pri:s.pri||'med',ela:0,subtasks:[],links,noteText:s.reason||'',mit:false,date:todayStr,recurring:'none',deadline:''});
   suggestions=suggestions.filter(x=>x.id!==id);
   save();saveSuggestions();renderSuggest();renderTasks();renderMIT();populateCalSel();
-  showToast('✓ 「タスク」タブに追加しました');
+  showToast(links.length?'✓ タスクに追加（メモ・参考リンク付き）':'✓ 「タスク」タブに追加しました');
 }
 function rejectSuggest(id){suggestions=suggestions.filter(x=>x.id!==id);saveSuggestions();renderSuggest();}
 function acceptAllSuggest(){suggestions.slice().forEach(s=>acceptSuggest(s.id));}
 // Claude(私)が起動時に呼ぶ想定：候補を一括セット
-function setSuggestions(list){suggestions=list.map((s,i)=>({id:Date.now()+i,name:s.name,pri:s.pri||'med',source:s.source||'other',reason:s.reason||''}));saveSuggestions();renderSuggest();}
+function setSuggestions(list){suggestions=list.map((s,i)=>({id:Date.now()+i,name:s.name,pri:s.pri||'med',source:s.source||'other',reason:s.reason||'',refs:s.refs||[]}));saveSuggestions();renderSuggest();}
 
 // ── ルーティン ──
 function addRoutine(){
