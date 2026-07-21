@@ -202,14 +202,14 @@ textarea.inp{resize:vertical;min-height:68px;line-height:1.6}
   .date-wrap input[type=date]{font-size:10px}
   /* Panel grids → single column */
   .col2{grid-template-columns:1fr!important}
-  #p-proj,#p-memo,#p-cal{grid-template-columns:1fr!important}
+  #p-proj,#p-memo,#p-cal,#p-routine{grid-template-columns:1fr!important}
   /* Pomodoro: stack timer + right panel */
   .pomo-wrap{grid-template-columns:1fr!important}
   .pomo-right{order:-1}
   .today-stats,.log-section{margin-bottom:0}
-  /* Nav tabs */
-  .nav{gap:0;width:100%}
-  .ntb{padding:6px 8px;font-size:11px;flex:1;text-align:center}
+  /* Nav tabs (9個あるので横スクロール) */
+  .nav{gap:2px;width:max-content}
+  .ntb{padding:6px 10px;font-size:11px;white-space:nowrap}
   /* Cards */
   .card{padding:13px}
   /* Lists */
@@ -299,6 +299,8 @@ textarea.inp{resize:vertical;min-height:68px;line-height:1.6}
     <button class="ntb on" onclick="tab('dash',this)">ダッシュボード</button>
     <button class="ntb" onclick="tab('pomo',this)">ポモドーロ</button>
     <button class="ntb" onclick="tab('tasks',this)">タスク</button>
+    <button class="ntb" onclick="tab('suggest',this)">💡 タスク提案</button>
+    <button class="ntb" onclick="tab('routine',this)">🔁 ルーティン</button>
     <button class="ntb" onclick="tab('proj',this)">案件管理</button>
     <button class="ntb" onclick="tab('memo',this)">メモ</button>
     <button class="ntb" onclick="tab('cal',this)">カレンダー</button>
@@ -421,6 +423,47 @@ textarea.inp{resize:vertical;min-height:68px;line-height:1.6}
       <button class="fb" onclick="setF('snoozed',this)">先送り</button>
     </div>
     <div class="task-items" id="task-list"></div>
+  </div>
+</div>
+
+<!-- SUGGEST -->
+<div class="pnl" id="p-suggest" style="grid-template-columns:1fr">
+  <div class="card card-acc">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="ct" style="margin:0">💡 AIタスク提案</div>
+      <button class="btn sm pri" onclick="requestTaskCreate()">✨ 提案を生成</button>
+    </div>
+    <div class="info-badge" style="margin-bottom:0">🤖 「✨ 提案を生成」を押した後、Claudeに「起動」または「タスク作成」と伝えると、Slack・Gmail・カレンダーから今日やるべき候補を抽出してここに表示します。</div>
+  </div>
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
+      <div class="ct" style="margin:0">提案されたタスク</div>
+      <span id="suggest-count" style="font-size:11px;color:var(--t3)"></span>
+    </div>
+    <div id="suggest-list"></div>
+  </div>
+</div>
+
+<!-- ROUTINE -->
+<div class="pnl" id="p-routine" style="grid-template-columns:280px minmax(0,1fr);align-items:start">
+  <div class="card card-acc">
+    <div class="ct">ルーティンを追加</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <input class="inp sm" id="rt-name" placeholder="ルーティン名（例：日報を書く）" onkeydown="if(event.key==='Enter')addRoutine()"/>
+      <div class="row">
+        <select class="sel" id="rt-freq" style="flex:1"><option value="daily">毎日</option><option value="weekly">毎週</option><option value="monthly">毎月</option></select>
+        <select class="sel" id="rt-pri" style="flex:1"><option value="high">🔴 高</option><option value="med" selected>🟡 中</option><option value="low">🟢 低</option></select>
+      </div>
+      <button class="btn pri full" onclick="addRoutine()">＋ ルーティンを追加</button>
+    </div>
+  </div>
+  <div class="card" style="min-height:200px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:11px">
+      <div class="ct" style="margin:0">ルーティン一覧</div>
+      <span id="routine-count" style="font-size:11px;color:var(--t3)"></span>
+    </div>
+    <div class="info-badge" style="margin-bottom:10px">🔁 「➕ タスクに追加」を押すと「タスク」タブに反映されます。ルーティン側は消えず、繰り返し使えます。</div>
+    <div id="routine-list"></div>
   </div>
 </div>
 
@@ -580,6 +623,10 @@ let tasks=S('tm_tasks',null)||[];
 let logs=S('tm_logs',null)||[];
 let memos=S('tm_memos',[]);
 let pomoLogs=S('tm_plogs',[]);
+let suggestions=S('tm_suggestions',[]);
+let routines=S('tm_routines',[]);
+const saveSuggestions=()=>localStorage.setItem('tm_suggestions',JSON.stringify(suggestions));
+const saveRoutines=()=>localStorage.setItem('tm_routines',JSON.stringify(routines));
 let filt='all',expanded=new Set(),noteExpanded=new Set();
 
 tasks=tasks.map(t=>({...t,subtasks:t.subtasks||[],links:t.links||[],noteText:t.noteText||'',mit:t.mit||false,date:t.date||todayStr,recurring:t.recurring||'none'}));
@@ -976,12 +1023,14 @@ function renderProj(){
 function exportData(){
   const data={
     exportedAt: new Date().toISOString(),
-    version: 3,
+    version: 4,
     tasks,
     logs,
     memos,
     pomoLogs,
-    projects
+    projects,
+    suggestions,
+    routines
   };
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -1005,8 +1054,10 @@ function importData(input){
       memos=data.memos||[];
       pomoLogs=data.pomoLogs||[];
       projects=data.projects||[];
-      save();saveMemos();savePLogs();saveProj();
-      renderTasks();renderMIT();renderMemos();populateCalSel();renderDash();renderProj();
+      suggestions=data.suggestions||[];
+      routines=data.routines||[];
+      save();saveMemos();savePLogs();saveProj();saveSuggestions();saveRoutines();
+      renderTasks();renderMIT();renderMemos();populateCalSel();renderDash();renderProj();renderSuggest();renderRoutine();
       showToast(`✅ ${tasks.length}件のタスクを復元しました`);
       document.getElementById('bk-info').textContent=`復元完了: ${new Date().toLocaleTimeString('ja-JP')}`;
     }catch(err){
@@ -1031,9 +1082,9 @@ function toggleMemoBody(id){const el=document.getElementById('mb-'+id);if(el)el.
 function renderMemos(){const el=document.getElementById('memo-list');document.getElementById('memo-count').textContent=memos.length?memos.length+'件':'';if(!memos.length){el.innerHTML='<div class="empty">左のフォームからメモを追加できます</div>';return;}el.innerHTML=memos.map(m=>{const diff=m.deadline?Math.floor((new Date(m.deadline+'T00:00:00')-new Date(todayStr+'T00:00:00'))/86400000):null;const dlLabel=m.deadline?new Date(m.deadline+'T00:00:00').toLocaleDateString('ja-JP',{month:'numeric',day:'numeric'})+'日':'';const dlCls=diff!==null&&diff<=2?' od':'';const dlPfx=diff!==null?(diff<0?'⚠ ':diff<=2?'⚡ ':''):'';return`<div class="memo-card"><div class="memo-card-hdr" onclick="toggleMemoBody(${m.id})"><div class="memo-proj">${m.proj}</div>${dlLabel?`<div class="memo-dl${dlCls}">${dlPfx}〆${dlLabel}</div>`:''}</div><div class="memo-body" id="mb-${m.id}"><div style="font-size:13px;font-weight:500;margin-bottom:4px">📋 ${m.task}</div>${m.detail?`<div style="font-size:12px;color:var(--t2);line-height:1.6;white-space:pre-wrap;margin-top:4px">${m.detail}</div>`:''}<div style="display:flex;gap:6px;margin-top:9px">${!m.taskified?`<button class="btn pri sm" onclick="taskifyMemo(${m.id})">➕ タスクに追加</button>`:`<button class="btn sm" disabled style="opacity:.4">✓ タスク化済み</button>`}<button class="btn sm" onclick="delMemo(${m.id})" style="color:var(--dan);border-color:var(--dan)">削除</button></div></div></div>`;}).join('');}
 function renderWeekStats(){const wd=tasks.filter(t=>t.status==='done').length;const ws=logs.reduce((a,l)=>a+l.dur,0);const tot=Math.max(tasks.length,1);document.getElementById('w-done').textContent=wd;document.getElementById('w-time').textContent=fmtd(ws)||'0m';document.getElementById('w-rate').textContent=Math.round(wd/tot*100)+'%';}
 
-function tab(id,el){document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('on'));document.querySelectorAll('.ntb').forEach(b=>b.classList.remove('on'));document.getElementById('p-'+id).classList.add('on');el.classList.add('on');if(id==='dash')renderDash();if(id==='tasks'){renderTasks();populateCalSel();}if(id==='memo')renderMemos();if(id==='proj')renderProj();if(id==='cal')renderCalTab();if(id==='week'){renderWeekStats();renderBackupInfo();}if(id==='pomo'){renderPomoLog();renderPomoStats();}}
+function tab(id,el){document.querySelectorAll('.pnl').forEach(p=>p.classList.remove('on'));document.querySelectorAll('.ntb').forEach(b=>b.classList.remove('on'));document.getElementById('p-'+id).classList.add('on');el.classList.add('on');if(id==='dash')renderDash();if(id==='tasks'){renderTasks();populateCalSel();}if(id==='memo')renderMemos();if(id==='proj')renderProj();if(id==='cal')renderCalTab();if(id==='week'){renderWeekStats();renderBackupInfo();}if(id==='pomo'){renderPomoLog();renderPomoStats();}if(id==='suggest')renderSuggest();if(id==='routine')renderRoutine();}
 
-renderDash();renderTasks();updateRingDisplay();populateCalSel();renderPomoLog();renderPomoStats();
+renderDash();renderTasks();updateRingDisplay();populateCalSel();renderPomoLog();renderPomoStats();renderSuggest();renderRoutine();
 (()=>{const fd=document.getElementById('cal-free-date');if(fd)fd.value=todayStr;})();
 
 function addFreeEventToCal(){
@@ -1066,7 +1117,78 @@ function requestTaskCreate(){
   localStorage.setItem('tm_task_create_queue',JSON.stringify(req));
   const btn=document.getElementById('task-create-btn');
   if(btn){btn.textContent='⏳ リクエスト済';btn.disabled=true;setTimeout(()=>{btn.textContent='✨ タスク作成';btn.disabled=false;},4000);}
-  showToast('✨ 次の起動時にタスクを自動生成します（Slack・Gmail確認）');
+  showToast('✨ Claudeに「起動」または「タスク作成」と伝えると候補を抽出します');
+}
+
+// ── タスク提案 ──
+function renderSuggest(){
+  const el=document.getElementById('suggest-list');
+  const cnt=document.getElementById('suggest-count');
+  if(cnt)cnt.textContent=suggestions.length?suggestions.length+'件':'';
+  if(!el)return;
+  if(!suggestions.length){el.innerHTML='<div class="empty">まだ提案はありません。<br>「✨ 提案を生成」を押してからClaudeに「起動」と伝えてください。</div>';return;}
+  const priLabel={high:'🔴 高',med:'🟡 中',low:'🟢 低'};
+  const srcLabel={slack:'💬 Slack',gmail:'📧 Gmail',cal:'📅 カレンダー',other:'📝 その他'};
+  el.innerHTML=suggestions.map(s=>`<div class="ti" style="margin-bottom:6px"><div class="trow" style="align-items:flex-start;flex-wrap:wrap">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:500;margin-bottom:3px">${s.name}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span class="tag tag-blue">${priLabel[s.pri]||'🟡 中'}</span>
+        <span class="tag tag-gray">${srcLabel[s.source]||srcLabel.other}</span>
+        ${s.reason?`<span style="font-size:11px;color:var(--t3)">${s.reason}</span>`:''}
+      </div>
+    </div>
+    <div style="display:flex;gap:5px;flex-shrink:0">
+      <button class="btn xs pri" onclick="acceptSuggest(${s.id})">➕ タスクに追加</button>
+      <button class="ib" onclick="rejectSuggest(${s.id})" title="却下">✕</button>
+    </div>
+  </div></div>`).join('');
+}
+function acceptSuggest(id){
+  const s=suggestions.find(x=>x.id===id);if(!s)return;
+  tasks.unshift({id:Date.now(),name:s.name,status:'todo',pri:s.pri||'med',ela:0,subtasks:[],links:[],noteText:s.reason||'',mit:false,date:todayStr,recurring:'none'});
+  suggestions=suggestions.filter(x=>x.id!==id);
+  save();saveSuggestions();renderSuggest();renderTasks();renderMIT();populateCalSel();
+  showToast('✓ 「タスク」タブに追加しました');
+}
+function rejectSuggest(id){suggestions=suggestions.filter(x=>x.id!==id);saveSuggestions();renderSuggest();}
+function acceptAllSuggest(){suggestions.slice().forEach(s=>acceptSuggest(s.id));}
+// Claude(私)が起動時に呼ぶ想定：候補を一括セット
+function setSuggestions(list){suggestions=list.map((s,i)=>({id:Date.now()+i,name:s.name,pri:s.pri||'med',source:s.source||'other',reason:s.reason||''}));saveSuggestions();renderSuggest();}
+
+// ── ルーティン ──
+function addRoutine(){
+  const n=document.getElementById('rt-name').value.trim();if(!n)return;
+  routines.unshift({id:Date.now(),name:n,freq:document.getElementById('rt-freq').value,pri:document.getElementById('rt-pri').value});
+  saveRoutines();document.getElementById('rt-name').value='';renderRoutine();showToast('✓ ルーティンを追加しました');
+}
+function delRoutine(id){routines=routines.filter(x=>x.id!==id);saveRoutines();renderRoutine();}
+function routineToTask(id){
+  const r=routines.find(x=>x.id===id);if(!r)return;
+  tasks.unshift({id:Date.now(),name:r.name,status:'todo',pri:r.pri||'med',ela:0,subtasks:[],links:[],noteText:'',mit:false,date:todayStr,recurring:'none'});
+  save();renderTasks();renderMIT();populateCalSel();
+  showToast('✓ 「タスク」タブに追加しました（ルーティンは残ります）');
+}
+function renderRoutine(){
+  const el=document.getElementById('routine-list');
+  const cnt=document.getElementById('routine-count');
+  if(cnt)cnt.textContent=routines.length?routines.length+'件':'';
+  if(!el)return;
+  if(!routines.length){el.innerHTML='<div class="empty">左のフォームからルーティンを追加してください</div>';return;}
+  const freqLabel={daily:'毎日',weekly:'毎週',monthly:'毎月'};
+  const freqTag={daily:'tag-green',weekly:'tag-blue',monthly:'tag-amber'};
+  const priLabel={high:'🔴',med:'🟡',low:'🟢'};
+  const order={daily:0,weekly:1,monthly:2};
+  const sorted=routines.slice().sort((a,b)=>(order[a.freq]??9)-(order[b.freq]??9));
+  el.innerHTML=sorted.map(r=>`<div class="ti" style="margin-bottom:6px"><div class="trow">
+    <span style="font-size:13px;flex-shrink:0">${priLabel[r.pri]||'🟡'}</span>
+    <span class="tname">${r.name}</span>
+    <span class="tag ${freqTag[r.freq]||'tag-gray'}" style="flex-shrink:0">${freqLabel[r.freq]||''}</span>
+    <div style="display:flex;gap:5px;flex-shrink:0">
+      <button class="btn xs pri" onclick="routineToTask(${r.id})">➕ タスクに追加</button>
+      <button class="ib" onclick="delRoutine(${r.id})" title="削除">✕</button>
+    </div>
+  </div></div>`).join('');
 }
 </script>
 </body>
